@@ -10,11 +10,11 @@
 
 void print_help(void) {
     printf("Usage:\n");
-    printf("./ipk-l2l3-scan -i INTERFACE [-s SUBNET] [-w TIMEOUT] [-h | --help]\n");
-    printf("./ipk-l2l3-scan -i\n");
+    printf("./ipk-L2L3-scan -i INTERFACE [-s SUBNET] [-w TIMEOUT] [-h | --help]\n");
+    printf("./ipk-L2L3-scan -i\n");
 
-    printf("./ipk-l2l3-scan -h\n");
-    printf("./ipk-l2l3-scan --help\n");
+    printf("./ipk-L2L3-scan -h\n");
+    printf("./ipk-L2L3-scan --help\n");
 }
 
 void print_interfaces(void){
@@ -35,6 +35,7 @@ void print_interfaces(void){
             printf("%s\n", ifa->ifa_name);
         }
     }
+
     freeifaddrs(ifaddr);
 }
 
@@ -57,6 +58,10 @@ int main (int argc, char *argv[]){
 
     printf("Interface: %s\n", args.interface);
     printf("Timeout: %d\n", args.timeout_in_ms);
+
+    for (int index = 0; index < args.subnet_count; index++){
+        printf("Subnet: %s\n", args.subnets[index]);
+    }
 
     return 0;
 }

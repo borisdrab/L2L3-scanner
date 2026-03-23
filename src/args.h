@@ -1,6 +1,7 @@
 #ifndef ARGS_H
 #define ARGS_H
 
+#define MAX_SUBNETS 32
 #define DEFAULT_TIMEOUT 1000
 
 typedef struct {
@@ -10,6 +11,9 @@ typedef struct {
     char interface[64];
 
     int timeout_in_ms;
+
+    char *subnets[MAX_SUBNETS];
+    int subnet_count;
 
 } program_args_t;
 

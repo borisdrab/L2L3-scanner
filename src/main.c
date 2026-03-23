@@ -1,0 +1,62 @@
+#include <stdio.h>
+#include <string.h>
+
+#include <ifaddrs.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+
+#include "args.h"
+
+void print_help(void) {
+    printf("Usage:\n");
+    printf("./ipk-l2l3-scan -i INTERFACE [-s SUBNET] [-w TIMEOUT] [-h | --help]\n");
+    printf("./ipk-l2l3-scan -i\n");
+
+    printf("./ipk-l2l3-scan -h\n");
+    printf("./ipk-l2l3-scan --help\n");
+}
+
+void print_interfaces(void){
+    struct ifaddrs *ifaddr, *ifa;
+
+    if (getifaddrs(&ifaddr) == -1) {
+        perror("getifaddrs");
+        return;
+    }
+
+    for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
+        if (ifa->ifa_addr == NULL) {
+            continue;
+        }
+
+        int family = ifa->ifa_addr->sa_family;
+        if (family == AF_INET) {                //TODO add ipv6
+            printf("%s\n", ifa->ifa_name);
+        }
+    }
+    freeifaddrs(ifaddr);
+}
+
+int main (int argc, char *argv[]){
+    program_args_t args = {0};
+
+    if (parse_args(argc, argv, &args) != 0) {
+        return 1;
+    }
+
+    if (args.show_help) {
+        print_help();
+        return 0;
+    }
+
+    if (args.list_interfaces) {
+        print_interfaces();
+        return 0;
+    }
+
+    printf("Interface: %s\n", args.interface);
+    printf("Timeout: %d\n", args.timeout_in_ms);
+
+    return 0;
+}

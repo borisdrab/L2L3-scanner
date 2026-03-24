@@ -77,17 +77,24 @@ int main (int argc, char *argv[]){
         iface.mac_addr[5]
     );
 
+    printf("Scanning ranges:\n");
+
     for (int index = 0; index < args.subnet_count; index++) {
         parsed_subnet_t subnet;
+        long long host_count;
 
         if (!split_subnet(args.subnets[index], &subnet)) {
             fprintf(stderr, "Error: invalid subnet '%s'\n", args.subnets[index]);
             return 1;
         }
 
-        printf("Subnet: %s\n", subnet.ip);
-        printf("Prefix: %d\n", subnet.prefix);
-        printf("Version: %d\n", subnet.form_version);
+        if (!normalize_subnet(&subnet)) {
+            fprintf(stderr, "Error: failed to normalize subnet '%s'\n", args.subnets[index]);
+            return 1;
+        }
+
+        host_count = count_hosts(&subnet);
+        printf("%s/%d %lld\n", subnet.ip, subnet.prefix, host_count);
     
     }
     return 0;

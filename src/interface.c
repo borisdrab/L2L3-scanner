@@ -12,10 +12,10 @@
 #include "interface.h"
 
 int get_interface_info(const char *ifname, interface_info_t *info) {
-    struct ifaddrs *interf = NULL;
-    struct ifaddrs *c_interfac = NULL;
-    int sockfd;
-    struct ifreq interfac_r;
+    struct ifaddrs *interfaces = NULL;
+    struct ifaddrs *current_interface = NULL;
+    int socket_file_descriptor;
+    struct ifreq interface_request;
 
     if (ifname == NULL || info == NULL) {
         return -1;
@@ -25,29 +25,29 @@ int get_interface_info(const char *ifname, interface_info_t *info) {
     strncpy(info->name, ifname, sizeof(info->name) - 1);
     info->name[sizeof(info->name) - 1] = '\0';
 
-    if (getifaddrs(&interf) == -1) {
+    if (getifaddrs(&interfaces) == -1) {
         return -1;
     }
 
-    for (c_interfac = interf; c_interfac != NULL; c_interfac = c_interfac->ifa_next) {
-        if (c_interfac->ifa_addr == NULL) {
+    for (current_interface = interfaces; current_interface != NULL; current_interface = current_interface->ifa_next) {
+        if (current_interface->ifa_addr == NULL) {
             continue;
         }
 
-        if (strcmp(c_interfac->ifa_name, ifname) != 0) {
+        if (strcmp(current_interface->ifa_name, ifname) != 0) {
             continue;
         }
 
-        if (c_interfac->ifa_addr->sa_family == AF_INET) {
-            struct sockaddr_in *ipv4_addr = (struct sockaddr_in *)c_interfac->ifa_addr;
+        if (current_interface->ifa_addr->sa_family == AF_INET) {
+            struct sockaddr_in *ipv4_addr = (struct sockaddr_in *)current_interface->ifa_addr;
 
             if (inet_ntop(AF_INET, &ipv4_addr->sin_addr, info->ip, sizeof(info->ip)) == NULL) {
-                freeifaddrs(interf);
+                freeifaddrs(interfaces);
                 return -1;
             }
         }
-        else if (c_interfac->ifa_addr->sa_family == AF_INET6) {
-            struct sockaddr_in6 *ipv6_addr = (struct sockaddr_in6 *)c_interfac->ifa_addr;
+        else if (current_interface->ifa_addr->sa_family == AF_INET6) {
+            struct sockaddr_in6 *ipv6_addr = (struct sockaddr_in6 *)current_interface->ifa_addr;
 
             if (IN6_IS_ADDR_LOOPBACK(&ipv6_addr->sin6_addr)) {
                 continue;
@@ -55,31 +55,31 @@ int get_interface_info(const char *ifname, interface_info_t *info) {
 
             if (info->ipv6[0] == '\0') {
                 if (inet_ntop(AF_INET6, &ipv6_addr->sin6_addr, info->ipv6, sizeof(info->ipv6)) == NULL) {
-                    freeifaddrs(interf);
+                    freeifaddrs(interfaces);
                     return -1;
                 }
             }
         }
     }
 
-    freeifaddrs(interf);
+    freeifaddrs(interfaces);
 
-    sockfd = socket(AF_INET, SOCK_DGRAM, 0);
-    if (sockfd < 0) {
+    socket_file_descriptor = socket(AF_INET, SOCK_DGRAM, 0);
+    if (socket_file_descriptor < 0) {
         return -1;
     }
 
-    memset(&interfac_r, 0, sizeof(interfac_r));
-    strncpy(interfac_r.ifr_name, ifname, IFNAMSIZ - 1);
-    interfac_r.ifr_name[IFNAMSIZ - 1] = '\0';
+    memset(&interface_request, 0, sizeof(interface_request));
+    strncpy(interface_request.ifr_name, ifname, IFNAMSIZ - 1);
+    interface_request.ifr_name[IFNAMSIZ - 1] = '\0';
 
-    if (ioctl(sockfd, SIOCGIFHWADDR, &interfac_r) < 0) {
-        close(sockfd);
+    if (ioctl(socket_file_descriptor, SIOCGIFHWADDR, &interface_request) < 0) {
+        close(socket_file_descriptor);
         return -1;
     }
 
-    memcpy(info->mac_addr, interfac_r.ifr_hwaddr.sa_data, 6);
+    memcpy(info->mac_addr, interface_request.ifr_hwaddr.sa_data, 6);
 
-    close(sockfd);
+    close(socket_file_descriptor);
     return 0;
 }

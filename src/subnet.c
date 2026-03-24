@@ -180,3 +180,87 @@ long long count_hosts(const parsed_subnet_t *subnet) {
     return -1;
 }
 
+int generate_ipv4_hosts(const parsed_subnet_t *subnet, char hosts[][MAX_IP_STR_LEN], int max_hosts) {
+    struct in_addr addr;
+
+    uint32_t ip_host_order;
+    uint32_t mask;
+    uint32_t network_host_order;
+    uint32_t broadcast_host_order;
+    uint32_t block_size;
+
+    int generated = 0;
+
+    if (subnet == NULL || hosts == NULL || max_hosts <= 0) {
+        return -1;
+    }
+
+    if (subnet->form_version != 4) {
+        return -1;
+    }
+
+    if (inet_pton(AF_INET, subnet->ip, &addr) != 1) {
+        return -1;
+    }
+
+    ip_host_order = ntohl(addr.s_addr);
+
+    if (subnet->prefix == 32) {
+        if (inet_ntop(AF_INET, &addr, hosts[0], MAX_IP_STR_LEN) == NULL) {
+            return -1;
+        }
+
+        return 1;
+    }
+
+
+    if (subnet->prefix == 0) {
+        mask = 0;
+    } else {
+        mask = 0xFFFFFFFFu << (32 - subnet->prefix);    
+    }
+
+    network_host_order = ip_host_order & mask;
+
+    block_size = 1u << (32 - subnet->prefix);
+    broadcast_host_order = network_host_order + block_size - 1;
+
+    if (subnet->prefix == 31) {
+        for (uint32_t ip = network_host_order; ip <= broadcast_host_order; ip++) {
+            struct in_addr current_addr;
+
+            if (generated >= max_hosts) {
+                break;
+            } 
+        
+            current_addr.s_addr = htonl(ip);
+
+            if (inet_ntop(AF_INET, &current_addr, hosts[generated],MAX_IP_STR_LEN) == NULL){
+                return -1;
+            }
+
+            generated++;
+        }
+
+        return generated;
+    }
+
+    for (uint32_t ip = network_host_order + 1; ip < broadcast_host_order; ip++) {
+        struct in_addr current_addr;
+
+        if (generated >= max_hosts) {
+            break;
+        } 
+        
+        current_addr.s_addr = htonl(ip);
+
+        if (inet_ntop(AF_INET, &current_addr, hosts[generated],MAX_IP_STR_LEN) == NULL){
+            return -1;
+        }
+
+        generated++;
+    }
+    return generated;
+}
+
+

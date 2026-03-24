@@ -7,6 +7,8 @@
 #include <netinet/in.h>
 
 #include "args.h"
+#include "interface.h"
+#include "subnet.h"
 
 void print_help(void) {
     printf("Usage:\n");
@@ -56,12 +58,37 @@ int main (int argc, char *argv[]){
         return 0;
     }
 
-    printf("Interface: %s\n", args.interface);
-    printf("Timeout: %d\n", args.timeout_in_ms);
+    interface_info_t iface;
 
-    for (int index = 0; index < args.subnet_count; index++){
-        printf("Subnet: %s\n", args.subnets[index]);
+    if (get_interface_info(args.interface, &iface) != 0) {
+        fprintf(stderr, "Erorr: failed to get interface info\n");
+        return 1;
     }
 
+    printf("IP: %s\n", iface.ip);
+
+    printf(
+        "MAC: %02x-%02x-%02x-%02x-%02x-%02x\n",
+        iface.mac_addr[0],
+        iface.mac_addr[1],
+        iface.mac_addr[2],
+        iface.mac_addr[3],
+        iface.mac_addr[4],
+        iface.mac_addr[5]
+    );
+
+    for (int index = 0; index < args.subnet_count; index++) {
+        parsed_subnet_t subnet;
+
+        if (!split_subnet(args.subnets[index], &subnet)) {
+            fprintf(stderr, "Error: invalid subnet '%s'\n", args.subnets[index]);
+            return 1;
+        }
+
+        printf("Subnet: %s\n", subnet.ip);
+        printf("Prefix: %d\n", subnet.prefix);
+        printf("Version: %d\n", subnet.form_version);
+    
+    }
     return 0;
 }

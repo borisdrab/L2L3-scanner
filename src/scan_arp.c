@@ -166,7 +166,7 @@ int scan_arp_ipv4(const char *ip, const char *interface, int timeout, host_resul
     }
 
     snprintf(result->mac, sizeof(result->mac),
-        "%02x:%02x:%02x:%02x:%02x:%02x",
+        "%02x-%02x-%02x-%02x-%02x-%02x",
         receive_arp_hdr->sender_hardware_addr[0],
         receive_arp_hdr->sender_hardware_addr[1],
         receive_arp_hdr->sender_hardware_addr[2],

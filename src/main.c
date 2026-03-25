@@ -69,7 +69,7 @@ int main (int argc, char *argv[]){
     printf("IP: %s\n", iface.ip);
 
     printf(
-        "MAC: %02x:%02x:%02x:%02x:%02x:%02x\n",
+        "MAC: %02x-%02x-%02x-%02x-%02x-%02x\n",
         iface.mac_addr[0],
         iface.mac_addr[1],
         iface.mac_addr[2],

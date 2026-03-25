@@ -9,6 +9,7 @@
 #include "args.h"
 #include "interface.h"
 #include "subnet.h"
+#include "scan_arp.h"
 
 void print_help(void) {
     printf("Usage:\n");
@@ -68,7 +69,7 @@ int main (int argc, char *argv[]){
     printf("IP: %s\n", iface.ip);
 
     printf(
-        "MAC: %02x-%02x-%02x-%02x-%02x-%02x\n",
+        "MAC: %02x:%02x:%02x:%02x:%02x:%02x\n",
         iface.mac_addr[0],
         iface.mac_addr[1],
         iface.mac_addr[2],
@@ -95,7 +96,35 @@ int main (int argc, char *argv[]){
 
         host_count = count_hosts(&subnet);
         printf("%s/%d %lld\n", subnet.ip, subnet.prefix, host_count);
-    
+
+        if (subnet.form_version == 4) {
+            char hosts[1024][MAX_IP_STR_LEN];
+
+            int generated = generate_ipv4_hosts(&subnet, hosts, 1024);
+
+            if (generated < 0) {
+                fprintf(stderr, "Error: failed to generate hosts\n");
+                return 1;
+            }
+
+            for (int jndex = 0; jndex < generated; jndex++) {
+                host_result_t result;
+
+                memset(&result, 0, sizeof(result));
+                strcpy(result.ip, hosts[jndex]);
+
+                if (scan_arp_ipv4(hosts[jndex], args.interface, args.timeout_in_ms, &result) != 0) {
+                    fprintf(stderr, "Error: ARP scan failed for %s\n", hosts[jndex]);
+                    continue;
+                }
+
+                if (result.arpndp_ok) {
+                    printf("%s arp OK %s\n", result.ip, result.mac);
+                } else {
+                    printf("%s arp FAIL %s\n", result.ip);
+                }
+            }
+        }
     }
     return 0;
 }

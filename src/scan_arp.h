@@ -1,7 +1,7 @@
 #ifndef SCAN_ARP_H
 #define SCAN_ARP_H
 
-#include "scan_common.h"
+#include "scan_result.h"
 
 int scan_arp_ipv4(
     const char *ip,

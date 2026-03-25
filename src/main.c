@@ -10,6 +10,8 @@
 #include "interface.h"
 #include "subnet.h"
 #include "scan_arp.h"
+#include "scan_result.h"
+#include "scan_icm4.h"
 
 void print_help(void) {
     printf("Usage:\n");
@@ -113,15 +115,23 @@ int main (int argc, char *argv[]){
                 memset(&result, 0, sizeof(result));
                 strcpy(result.ip, hosts[jndex]);
 
-                if (scan_arp_ipv4(hosts[jndex], args.interface, args.timeout_in_ms, &result) != 0) {
-                    fprintf(stderr, "Error: ARP scan failed for %s\n", hosts[jndex]);
-                    continue;
-                }
+                scan_arp_ipv4(
+                    hosts[jndex],
+                    args.interface,
+                    args.timeout_in_ms,
+                    &result
+                );
+
+                scan_icmpv4(
+                    hosts[jndex],
+                    args.timeout_in_ms,
+                    &result
+                );
 
                 if (result.arpndp_ok) {
-                    printf("%s arp OK %s\n", result.ip, result.mac);
+                    printf("%s arp OK %s icmp %s\n", result.ip, result.mac, result.icmp_ok ? "OK" : "FAIL");
                 } else {
-                    printf("%s arp FAIL %s\n", result.ip);
+                    printf("%s arp FAIL icmp %s\n", result.ip, result.icmp_ok ? "OK" : "FAIL");
                 }
             }
         }

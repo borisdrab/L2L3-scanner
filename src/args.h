@@ -9,6 +9,7 @@ typedef struct {
     int list_interfaces;
 
     char interface[64];
+    int interface_set;
 
     int timeout_in_ms;
 

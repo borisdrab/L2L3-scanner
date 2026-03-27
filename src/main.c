@@ -5,6 +5,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <stdlib.h>
 
 #include "args.h"
 #include "interface.h"
@@ -12,6 +13,7 @@
 #include "scan_arp.h"
 #include "scan_result.h"
 #include "scan_icm4.h"
+#include "scan_ndp.h"
 
 void print_help(void) {
     printf("Usage:\n");
@@ -134,6 +136,49 @@ int main (int argc, char *argv[]){
                     printf("%s arp FAIL icmp %s\n", result.ip, result.icmp_ok ? "OK" : "FAIL");
                 }
             }
+        }
+        else if (subnet.form_version == 6) {
+
+            if (host_count < 0 || host_count > MAX_IPV6_HOSTS) {
+                fprintf(stderr, "Error: unsupported ipv6 range %s/%d\n", subnet.ip, subnet.prefix);
+                continue;
+            }
+
+            char (*hosts)[MAX_IP_STR_LEN] = malloc((size_t)host_count * sizeof(*hosts));
+            if (hosts == NULL) {
+                fprintf(stderr, "Error: failed to alloc memory for hosts\n");
+                return 1;
+            }
+
+            int generated = generate_ipv6_hosts(&subnet, hosts, (int)host_count);
+
+            if (generated < 0) {
+                fprintf(stderr, "Error: failed to generate hosts\n");
+                free(hosts);
+                continue;
+            }
+
+            for (int jndex = 0; jndex < generated; jndex++) {
+
+                host_result_t result;
+
+                memset(&result, 0, sizeof(result));
+                strcpy(result.ip, hosts[jndex]);
+
+                scan_ndp_ipv6(
+                    hosts[jndex],
+                    args.interface,
+                    args.timeout_in_ms,
+                    &result
+                );
+
+                if (result.arpndp_ok) {
+                    printf("%s ndp OK %s\n", result.ip, result.mac);
+                } else {
+                    printf("%s ndp FAIL\n", result.ip);
+                }
+            }
+            free(hosts);
         }
     }
     return 0;

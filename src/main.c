@@ -99,7 +99,7 @@ int main (int argc, char *argv[]){
     }
 
     if (get_interface_info(args.interface, &iface) != 0) {
-        fprintf(stderr, "Erorr: failed to get interface info\n");
+        fprintf(stderr, "Error: failed to get interface info\n");
         return 1;
     }
 

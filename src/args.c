@@ -87,7 +87,7 @@ int parse_args(int argc, char **argv, program_args_t *args) {
         }
 
         else {
-            fprintf(stderr, "Error: unknown argumnent '%s'\n", argv[index]);
+            fprintf(stderr, "Error: unknown argument '%s'\n", argv[index]);
             return 1;
         }
     }

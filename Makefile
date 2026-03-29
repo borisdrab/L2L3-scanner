@@ -4,8 +4,17 @@ LDFLAGS =
 SRC = $(wildcard src/*.c)
 OBJ = $(SRC:.c=.o)
 TARGET = ipk-L2L3-scan
+LOGIN ?= xdrabbo00
 
-.PHONY: all clean test
+SUBMISSION_FILES := \
+	src \
+	tests \
+	Makefile \
+	README.md \
+	LICENSE \
+	CHANGELOG.md
+
+.PHONY: all clean test NixDevShellName pack
 
 all: $(TARGET)
 
@@ -16,10 +25,15 @@ src/%.o: src/%.c
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 clean:
-	rm -f $(OBJ) $(TARGET)
+	rm -f $(OBJ) $(TARGET) $(LOGIN).zip
 
 test: $(TARGET)
-	@echo "No tests  provided yet."
+	chmod +x tests/test.sh
+	bash tests/test.sh
 
 NixDevShellName:
 	@echo c
+
+pack:
+	rm -f $(LOGIN).zip
+	zip -r $(LOGIN).zip $(SUBMISSION_FILES) -x "src/*.o" "*.zip" ".git/*" ".DS_Store"

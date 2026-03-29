@@ -2,6 +2,7 @@
 #define SUBNET_H
 
 #define MAX_IP_STR_LEN 128
+#define MAX_IPV6_HOSTS 65536
 
 typedef struct {
     int form_version;
@@ -15,5 +16,6 @@ int split_subnet(const char *subnet_str, parsed_subnet_t *result);
 int normalize_subnet(parsed_subnet_t *subnet);
 long long count_hosts(const parsed_subnet_t *subnet);
 int generate_ipv4_hosts(const parsed_subnet_t *subnet, char hosts[][MAX_IP_STR_LEN], int max_hosts);
+int generate_ipv6_hosts(const parsed_subnet_t *subnet, char hosts[][MAX_IP_STR_LEN], int max_hosts);
 
 #endif

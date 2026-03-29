@@ -36,6 +36,7 @@ int scan_icmpv4(const char *ip, int timeout, host_result_t *result){
     int raw_socket_fd;
     struct sockaddr_in target_addr;
     struct timeval receive_timeout;
+    struct in_addr target_ip_addr;
 
     unsigned char send_buffer[64];
     unsigned char receive_buffer[1024];
@@ -48,13 +49,13 @@ int scan_icmpv4(const char *ip, int timeout, host_result_t *result){
         return -1;
     }
 
-    strcpy(result->ip, ip);
+    strncpy(result->ip, ip, sizeof(result->ip) - 1);
+    result->ip[sizeof(result->ip) - 1] = '\0';
     result->icmp_ok = 0;        //from scan_result
 
     raw_socket_fd = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
     if (raw_socket_fd < 0) {
-        perror("socket");
-        return -1;
+        return 0;
     }
 
     memset(&target_addr, 0, sizeof(target_addr));
@@ -66,65 +67,73 @@ int scan_icmpv4(const char *ip, int timeout, host_result_t *result){
         return -1;
     }
 
+    target_ip_addr = target_addr.sin_addr;
+
     receive_timeout.tv_sec = timeout / 1000;
     receive_timeout.tv_usec = (timeout % 1000) * 1000;
 
     if (setsockopt(raw_socket_fd, SOL_SOCKET, SO_RCVTIMEO, &receive_timeout, sizeof(receive_timeout)) < 0) {
-        perror("setsockopt SO_RCVTIMEO");
         close(raw_socket_fd);
-        return -1;
+        return 0;
     }
-
-    printf("ICMPv4 socket opened for %s\n", ip);
 
     memset(send_buffer, 0, sizeof(send_buffer));
 
     icmp_header = (struct icmphdr *)send_buffer;
-
     icmp_header->type = ICMP_ECHO;
     icmp_header->code = 0;
     icmp_header->un.echo.id = htons((unsigned short)getpid());
     icmp_header->un.echo.sequence = htons(1);
     icmp_header->checksum = 0;
-
     icmp_header->checksum = icmp_checksum(send_buffer, sizeof(send_buffer));
 
-    printf("ICMP packet prepared for %s\n", ip);
 
     if (sendto(raw_socket_fd, send_buffer, sizeof(send_buffer), 0, (struct sockaddr *)&target_addr, sizeof(target_addr)) < 0) {
-        perror("sendto");
-        close(raw_socket_fd);
-        return -1;
-    }
-
-    printf("ICMP request send to %s\n", ip);
-
-    received_bytes = recvfrom(raw_socket_fd, receive_buffer, sizeof(receive_buffer), 0, NULL, NULL);
-
-    if (received_bytes < 0) {
         close(raw_socket_fd);
         return 0;
     }
 
-    printf("Received %zd bytes\n", received_bytes);
+    for (;;) {
+        struct iphdr *ip_header;
+        struct icmphdr *icmp_reply;
+        int ip_header_len;
 
-    if ((size_t)received_bytes < sizeof(struct iphdr) + sizeof(struct icmphdr)) {
-        close(raw_socket_fd);
-        return 0;
+        received_bytes = recvfrom(raw_socket_fd, receive_buffer, sizeof(receive_buffer), 0, NULL, NULL);
+
+        if (received_bytes < 0) {
+            close(raw_socket_fd);
+            return 0;
+        }
+
+        if ((size_t)received_bytes < sizeof(struct iphdr)) {
+            continue;
+        }
+
+        ip_header = (struct iphdr *)receive_buffer;
+        ip_header_len = ip_header->ihl * 4;
+
+        if ((size_t)received_bytes < (size_t)(ip_header_len + (int)sizeof(struct icmphdr))) {
+            continue;
+        }
+
+        if (ip_header->saddr != target_ip_addr.s_addr) {
+            continue;
+        }
+
+        icmp_reply = (struct icmphdr *)(receive_buffer + ip_header_len);
+
+        if (icmp_reply->type == ICMP_ECHO) {
+            continue;
+        }
+
+        if (icmp_reply->type == ICMP_ECHOREPLY &&
+            ntohs(icmp_reply->un.echo.id) == (unsigned short)getpid() &&
+            ntohs(icmp_reply->un.echo.sequence) == 1) {
+            result->icmp_ok = 1;
+            close(raw_socket_fd);
+            return 0;
+        }
     }
-
-    struct iphdr *ip_header;
-    struct icmphdr *icmp_reply;
-
-    ip_header = (struct iphdr *)receive_buffer;
-
-    icmp_reply = (struct icmphdr *)(receive_buffer + ip_header->ihl * 4);
-
-    if (icmp_reply->type == ICMP_ECHOREPLY && ntohs(icmp_reply->un.echo.id) == (unsigned short)getpid() && ntohs(icmp_reply->un.echo.sequence) == 1) {
-        result->icmp_ok = 1;
-        printf("ICMP reply received from %s\n", ip);
-    }
-
 
     close(raw_socket_fd);
     return 0;

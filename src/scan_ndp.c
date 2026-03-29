@@ -123,17 +123,17 @@ int scan_ndp_ipv6(const char *ip, const char *interface, int timeout, host_resul
         return -1;
     }
 
-    strcpy(result->ip, ip);
+    strncpy(result->ip, ip, sizeof(result->ip) - 1);
+    result->ip[sizeof(result->ip) - 1] = '\0';
 
     result->arpndp_ok = 0;
     result->mac[0] = '\0';
+    result->icmp_ok = 0;
 
     if(get_interface_info(interface, &interface_info) != 0) {
         fprintf(stderr, "Error: failed to get interface info\n");
         return -1;
     }
-
-    printf("Interface IPv6 for NDP: %s\n", interface_info.ipv6);
 
     if (inet_pton(AF_INET6, ip, &target_ip_addr) != 1) {
         fprintf(stderr, "Error: invalid IPv6 address %s\n", ip);
@@ -157,14 +157,10 @@ int scan_ndp_ipv6(const char *ip, const char *interface, int timeout, host_resul
     memcpy(ethernet_header->h_source, interface_info.mac_addr, 6);
     ethernet_header->h_proto = htons(ETH_P_IPV6);
 
-    printf("Ethernet frame prepared\n");
-
     ipv6_header->ip6_flow = htonl((6 << 28));
     ipv6_header->ip6_hlim = 255;
     ipv6_header->ip6_nxt = IPPROTO_ICMPV6;
     ipv6_header->ip6_dst = solicited_node_multicast_ip;
-
-    printf("IPv6 header prepared\n");
 
     struct icmp6_hdr *icmp6_header;
     struct nd_neighbor_solicit *neighbor_solicitation;
@@ -185,8 +181,6 @@ int scan_ndp_ipv6(const char *ip, const char *interface, int timeout, host_resul
         return -1;
     }
 
-    printf("ICMPv6 Neighbor solicitation prepared\n");
-
     source_mac_option = (ndp_source_link_layer_option_t *)(send_buffer + sizeof(struct ethhdr) + sizeof(struct ip6_hdr) + sizeof(struct nd_neighbor_solicit));
 
     source_mac_option->type = 1;
@@ -196,30 +190,15 @@ int scan_ndp_ipv6(const char *ip, const char *interface, int timeout, host_resul
     ipv6_header->ip6_plen = htons(sizeof(struct nd_neighbor_solicit) + sizeof(ndp_source_link_layer_option_t));
     icmp6_header->icmp6_cksum = compute_icmpv6_checksum(&ipv6_header->ip6_src, &ipv6_header->ip6_dst, icmp6_header, sizeof(struct nd_neighbor_solicit) + sizeof(ndp_source_link_layer_option_t));
 
-    printf("ICMPv6 checksum compute\n");
-
-    printf("Source Link-Layer Address option prepared\n");
-
 
     if (inet_ntop(AF_INET6, &solicited_node_multicast_ip, multicast_ip_str, sizeof(multicast_ip_str)) == NULL) {
         fprintf(stderr, "Error: failed to convert multicast IPv6 address\n");
         return -1;
-    }
-
-    printf("Solicited-node multicast IPv6: %s\n", multicast_ip_str);
-    printf("Multicast MAC: %02x-%02x-%02x-%02x-%02x-%02x\n",
-            multicast_mac[0],
-            multicast_mac[1],
-            multicast_mac[2],
-            multicast_mac[3],
-            multicast_mac[4],
-            multicast_mac[5]);
-       
+    }  
 
     raw_socket_fd = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_IPV6));
     if (raw_socket_fd < 0) {
-        perror("socket");
-        return -1;
+        return 0;
     }
 
     memset(&interface_request, 0, sizeof(interface_request));
@@ -227,9 +206,8 @@ int scan_ndp_ipv6(const char *ip, const char *interface, int timeout, host_resul
     interface_request.ifr_name[IFNAMSIZ - 1] = '\0';
 
     if(ioctl(raw_socket_fd, SIOCGIFINDEX, &interface_request) < 0) {
-        perror("ioctl SIOCGIFINDEX");
         close(raw_socket_fd);
-        return -1;
+        return 0;
     }
 
     // counting timeout
@@ -237,9 +215,8 @@ int scan_ndp_ipv6(const char *ip, const char *interface, int timeout, host_resul
     receive_timeout.tv_usec = (timeout % 1000) * 1000;
 
     if (setsockopt(raw_socket_fd, SOL_SOCKET, SO_RCVTIMEO, &receive_timeout, sizeof(receive_timeout)) < 0) {
-        perror("setsockopt SO_RCVTIMEO");
         close(raw_socket_fd);
-        return -1;
+        return 0;
     }
 
     memset(&socket_address, 0, sizeof(socket_address));
@@ -251,25 +228,17 @@ int scan_ndp_ipv6(const char *ip, const char *interface, int timeout, host_resul
     sent_bytes = sendto(raw_socket_fd, send_buffer, sizeof(struct ethhdr) + sizeof(struct ip6_hdr) + sizeof(struct nd_neighbor_solicit) + sizeof(ndp_source_link_layer_option_t), 0, (struct sockaddr *)&socket_address, sizeof(socket_address));
 
     if (sent_bytes < 0) {
-        perror("sendto");
         close(raw_socket_fd);
-        return -1;
+        return 0;
     }
-
-    printf("NDP Neigbor Solicitation sent to %s\n", ip);
-    printf("NDP socket opened for %s\n", ip);
-    printf("Interface index %d\n", interface_request.ifr_ifindex);
-
 
     for (;;) {                                                                                  // logic likewise in ipv4
         received_bytes = recvfrom(raw_socket_fd, receive_buffer, sizeof(receive_buffer), 0, NULL, NULL);
 
-        if (received_bytes < 0) {
+        if (received_bytes < 0) {       //timeout reached
             close(raw_socket_fd);
             return 0;
         }
-
-        printf("Received %zd bytes\n", received_bytes);
 
         if ((size_t)received_bytes < sizeof(struct ethhdr)) {
             continue;
@@ -294,11 +263,10 @@ int scan_ndp_ipv6(const char *ip, const char *interface, int timeout, host_resul
         }
         struct icmp6_hdr *icmp6_reply = (struct icmp6_hdr *)(receive_buffer + sizeof(struct ethhdr) + sizeof(struct ip6_hdr));
 
-        printf("NDP ICMPv6 type=%d code=%d\n", icmp6_reply->icmp6_type, icmp6_reply->icmp6_code);
-
         if (icmp6_reply->icmp6_type != ND_NEIGHBOR_ADVERT) {
             continue;
         }
+
         struct nd_neighbor_advert *neighbor_advert = (struct nd_neighbor_advert *)(receive_buffer + sizeof(struct ethhdr) + sizeof(struct ip6_hdr));
 
         if(memcmp(&neighbor_advert->nd_na_target, &target_ip_addr, sizeof(struct in6_addr)) != 0) {
@@ -318,9 +286,9 @@ int scan_ndp_ipv6(const char *ip, const char *interface, int timeout, host_resul
 
         result->arpndp_ok = 1;
 
-        printf("NDP reply received from %s\n", ip);
-
         close(raw_socket_fd);
         return 0;
     }
-}               // clear debug prints !!!!!!!!
+    close(raw_socket_fd);
+    return 0;
+}

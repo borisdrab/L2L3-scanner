@@ -170,11 +170,30 @@ long long count_hosts(const parsed_subnet_t *subnet) {
     }
 
     if (subnet->form_version == 6) {
-        if (subnet->prefix == 128) {
+        int host_bits;
+        long long block_size;
+
+        host_bits = 128 - subnet->prefix;
+
+        if (host_bits < 0) {
+            return -1;
+        }
+
+        if (host_bits == 0) {
             return 1;
         }
 
-        return -1;
+        if (host_bits > 16) {
+            return -1;
+        }
+
+        block_size = 1LL << host_bits;
+
+        if (block_size > MAX_IPV6_HOSTS) {
+            return -1;
+        }
+
+        return block_size;
     }
 
     return -1;
@@ -182,7 +201,6 @@ long long count_hosts(const parsed_subnet_t *subnet) {
 
 int generate_ipv4_hosts(const parsed_subnet_t *subnet, char hosts[][MAX_IP_STR_LEN], int max_hosts) {
     struct in_addr addr;
-
     uint32_t ip_host_order;
     uint32_t mask;
     uint32_t network_host_order;
@@ -263,4 +281,56 @@ int generate_ipv4_hosts(const parsed_subnet_t *subnet, char hosts[][MAX_IP_STR_L
     return generated;
 }
 
+int generate_ipv6_hosts(const parsed_subnet_t *subnet, char hosts[][MAX_IP_STR_LEN], int max_hosts) {
+    struct in6_addr base_addr;
+    int host_bits;
+    long long total_hosts;
 
+    if (subnet == NULL || hosts == NULL || max_hosts <= 0) {
+        return -1;
+    }
+
+    if (subnet->form_version != 6) {
+        return -1;
+    }
+
+    if (inet_pton(AF_INET6, subnet->ip, &base_addr) != 1) {
+        return -1;
+    }
+
+    host_bits = 128 - subnet->prefix;
+
+    if (host_bits < 0) {
+        return -1;
+    }
+
+    if (host_bits > 16) {
+        return -1;
+    }
+
+    total_hosts = 1LL << host_bits;
+
+    if (total_hosts > MAX_IPV6_HOSTS) {
+        return -1;
+    }
+
+    if (total_hosts > max_hosts) {
+        total_hosts = max_hosts;
+    }
+
+    for (int index = 0; index < total_hosts; index++) {
+        struct in6_addr current_addr = base_addr;
+
+        current_addr.s6_addr[14] += (index >> 8) & 0xFF;
+        current_addr.s6_addr[15] += index & 0xFF;
+
+        if (current_addr.s6_addr[15] < (index & 0xFF)) {
+            current_addr.s6_addr[14] ++;
+        }
+
+        if (inet_ntop(AF_INET6, &current_addr, hosts[index], MAX_IP_STR_LEN) == NULL) {
+            return -1;
+        }
+    }
+    return (int)total_hosts;
+}

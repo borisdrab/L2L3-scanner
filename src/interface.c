@@ -40,10 +40,22 @@ int get_interface_info(const char *ifname, interface_info_t *info) {
 
         if (current_interface->ifa_addr->sa_family == AF_INET) {
             struct sockaddr_in *ipv4_addr = (struct sockaddr_in *)current_interface->ifa_addr;
+            char candidate_ip[INET_ADDRSTRLEN];
 
-            if (inet_ntop(AF_INET, &ipv4_addr->sin_addr, info->ip, sizeof(info->ip)) == NULL) {
+            if (inet_ntop(AF_INET, &ipv4_addr->sin_addr, candidate_ip, sizeof(candidate_ip)) == NULL) {
                 freeifaddrs(interfaces);
                 return -1;
+            }
+
+            // prefer non-link-local ipv4, 169.254.x.x only as fallback 
+            if (strncmp(candidate_ip, "169.254.", 8) != 0) {
+                strncpy(info->ip, candidate_ip, sizeof(info->ip) - 1);
+                info->ip[sizeof(info->ip) - 1] = '\0';
+            }
+
+            else if (info->ip[0] == '\0') {
+                strncpy(info->ip, candidate_ip, sizeof(info->ip) - 1);
+                info->ip[sizeof(info->ip) - 1] = '\0';
             }
         }
         else if (current_interface->ifa_addr->sa_family == AF_INET6) {
@@ -51,6 +63,15 @@ int get_interface_info(const char *ifname, interface_info_t *info) {
 
             if (IN6_IS_ADDR_LOOPBACK(&ipv6_addr->sin6_addr)) {
                 continue;
+            }
+
+            if (IN6_IS_ADDR_LINKLOCAL(&ipv6_addr->sin6_addr)) {
+                if (inet_ntop(AF_INET6, &ipv6_addr->sin6_addr, info->ipv6, sizeof(info->ipv6)) == NULL) {
+                    freeifaddrs(interfaces);
+                    return -1;
+                }
+
+                break;
             }
 
             if (info->ipv6[0] == '\0') {

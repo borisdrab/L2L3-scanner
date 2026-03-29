@@ -20,3 +20,6 @@ clean:
 
 test: $(TARGET)
 	@echo "No tests  provided yet."
+
+NixDevShellName:
+	@echo c

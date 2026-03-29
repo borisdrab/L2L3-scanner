@@ -56,7 +56,8 @@ int scan_arp_ipv4(const char *ip, const char *interface, int timeout, host_resul
         return -1;
     }
 
-    strcpy(result->ip, ip);
+    strncpy(result->ip, ip, sizeof(result->ip) - 1);
+    result->ip[sizeof(result->ip) - 1] = '\0';
     result->arpndp_ok = 0;
     result->icmp_ok = 0;
     result->mac[0] = '\0';
@@ -78,8 +79,7 @@ int scan_arp_ipv4(const char *ip, const char *interface, int timeout, host_resul
 
     raw_socket_fd = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ARP));
     if (raw_socket_fd < 0) {
-        perror("socket");
-        return -1;
+        return 0;
     }
 
     memset(&interface_request, 0, sizeof(interface_request));
@@ -87,18 +87,16 @@ int scan_arp_ipv4(const char *ip, const char *interface, int timeout, host_resul
     interface_request.ifr_name[IFNAMSIZ - 1] = '\0';
 
     if (ioctl(raw_socket_fd, SIOCGIFINDEX, &interface_request) < 0) {
-        perror("ioctl SIOCGIFINDEX");
         close(raw_socket_fd);
-        return -1;
+        return 0;
     }
 
     receive_timeout.tv_sec = timeout / 1000;
     receive_timeout.tv_usec = (timeout % 1000) * 1000;
 
     if(setsockopt(raw_socket_fd, SOL_SOCKET, SO_RCVTIMEO, &receive_timeout, sizeof(receive_timeout)) < 0) {
-        perror("setsockopt SO_RCVTIMEO");
         close(raw_socket_fd);
-        return -1;
+        return 0;
     }
 
     memset(&socket_address, 0, sizeof(socket_address));
@@ -125,60 +123,67 @@ int scan_arp_ipv4(const char *ip, const char *interface, int timeout, host_resul
     memset(arp_header->target_hardware_addr, 0x00, 6);
     memcpy(arp_header->target_protocol_addr, &target_ip_addr.s_addr, 4);
 
-
-    printf("RAW socket opened for %s\n", ip);
-    printf("Interface index: %d\n", interface_request.ifr_ifindex);
-    printf("ARP frame prepared for %s\n", ip);
-
     if (sendto(raw_socket_fd, arp_frame, sizeof(arp_frame), 0, (struct sockaddr *)&socket_address, sizeof(socket_address)) < 0) {
-        perror("sendto");
-        close(raw_socket_fd);
-        return -1;
-    }
-
-    printf("ARP request sent to %s\n", ip);
-
-    received_bytes = recvfrom(raw_socket_fd, receive_buffer, sizeof(receive_buffer), 0, NULL, NULL);
-
-    if (received_bytes < 0) {
         close(raw_socket_fd);
         return 0;
     }
 
-    printf("Received %zd bytes\n", received_bytes);
 
-    ethernet_header_t *recv_eth_hdr = (ethernet_header_t *)receive_buffer;
-    arp_header_t *receive_arp_hdr = (arp_header_t *)(receive_buffer + sizeof(ethernet_header_t));
+    for (;;) {
+        ethernet_header_t *recv_eth_hdr;
+        arp_header_t *receive_arp_hdr;
 
-    if ((size_t)received_bytes < sizeof(ethernet_header_t) + sizeof(arp_header_t)) {
+        received_bytes = recvfrom(raw_socket_fd, receive_buffer, sizeof(receive_buffer), 0, NULL, NULL);
+
+        if (received_bytes < 0) {
+            close(raw_socket_fd);
+            return 0;
+        }
+
+        if ((size_t)received_bytes < sizeof(ethernet_header_t) + sizeof(arp_header_t)) {
+            continue;
+        }
+
+        recv_eth_hdr = (ethernet_header_t *)receive_buffer;
+        receive_arp_hdr = (arp_header_t *)(receive_buffer + sizeof(ethernet_header_t));
+
+        if (ntohs(recv_eth_hdr->ethertype) != ETH_P_ARP) {
+            continue;
+        }
+
+        if (ntohs(receive_arp_hdr->operation) != ARPOP_REPLY) {
+            continue;
+        }
+
+        if (memcmp(receive_arp_hdr->sender_protocol_addr, &target_ip_addr.s_addr, 4) != 0) {
+            continue;
+        }
+
+        if (memcmp(receive_arp_hdr->target_protocol_addr, &sender_ip_addr.s_addr, 4) != 0) {
+            continue;
+        }
+
+        if (memcmp(receive_arp_hdr->sender_hardware_addr, interface_info.mac_addr, 6) == 0) {
+            continue;
+        }
+
+        snprintf(result->mac, sizeof(result->mac),
+            "%02x-%02x-%02x-%02x-%02x-%02x",
+            receive_arp_hdr->sender_hardware_addr[0],
+            receive_arp_hdr->sender_hardware_addr[1],
+            receive_arp_hdr->sender_hardware_addr[2],
+            receive_arp_hdr->sender_hardware_addr[3],
+            receive_arp_hdr->sender_hardware_addr[4],
+            receive_arp_hdr->sender_hardware_addr[5]
+        );
+
+        result->arpndp_ok = 1;
+
         close(raw_socket_fd);
         return 0;
+
     }
 
-    if (ntohs(recv_eth_hdr->ethertype) != ETH_P_ARP) {
         close(raw_socket_fd);
         return 0;
-    }
-
-    if (memcmp(receive_arp_hdr->sender_protocol_addr, &target_ip_addr.s_addr, 4) != 0) {
-        close(raw_socket_fd);
-        return 0;
-    }
-
-    snprintf(result->mac, sizeof(result->mac),
-        "%02x-%02x-%02x-%02x-%02x-%02x",
-        receive_arp_hdr->sender_hardware_addr[0],
-        receive_arp_hdr->sender_hardware_addr[1],
-        receive_arp_hdr->sender_hardware_addr[2],
-        receive_arp_hdr->sender_hardware_addr[3],
-        receive_arp_hdr->sender_hardware_addr[4],
-        receive_arp_hdr->sender_hardware_addr[5]
-    );
-
-    result->arpndp_ok = 1;
-
-    printf("ARP reply received from %s\n", ip);
-
-    close(raw_socket_fd);
-    return 0;
 }

@@ -5,8 +5,8 @@ set -o pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 BIN="$PROJECT_DIR/ipk-L2L3-scan"
-
-INTERFACE="enp0s1"
+ 
+INTERFACE=${INTERFACE:-$(ls /sys/class/net | grep -E '^(e|w)' | head -n1)}  #dynamically choose network interface
 
 pass_count=0
 fail_count=0

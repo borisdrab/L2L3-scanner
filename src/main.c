@@ -7,6 +7,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <net/if.h>
+#include <unistd.h>
 
 #include <signal.h> // include needed for signal termination
 
@@ -171,49 +172,77 @@ int main (int argc, char *argv[]){
         host_count = count_hosts(&subnet);
 
         if (subnet.form_version == 4) {
-            char hosts[1024][MAX_IP_STR_LEN];
+            char (*hosts)[MAX_IP_STR_LEN] = malloc((size_t)host_count * sizeof(*hosts));
 
-            int generated = generate_ipv4_hosts(&subnet, hosts, 1024);
-
-            if (generated < 0) {
-                fprintf(stderr, "Error: failed to generate hosts\n");
+            if (hosts == NULL){
+                fprintf(stderr, "Error: failed to alloc memory for hosts\n");
                 return 1;
             }
 
-            for (int jndex = 0; jndex < generated; jndex++) {
-                host_result_t result;
+            int generated = generate_ipv4_hosts(&subnet, hosts, (int)host_count);
 
+            if (generated < 0) {
+                fprintf(stderr, "Error: failed to generate hosts\n");
+                free(hosts);
+                return 1;
+            }
+
+            // new functionality for reimplementation
+            host_result_t results[generated];
+            memset(results, 0, sizeof(results));
+
+            for (int jndex = 0; jndex < generated; jndex++) {
+                strncpy(results[jndex].ip, hosts[jndex], sizeof(results[jndex].ip) - 1);
+                results[jndex].ip[sizeof(results[jndex].ip) - 1] = '\0';
+            }
+
+            interface_info_t interface_info;
+            int interface_index;
+            int arp_fd = open_arp_socket(args.interface, args.timeout_in_ms, &interface_info, &interface_index);
+            int icmpv4_fd = open_icmpv4_socket(args.timeout_in_ms);
+
+            if (arp_fd < 0 || icmpv4_fd < 0) {  // either socket didnt open 
+                if (arp_fd >= 0) {
+                    close(arp_fd);
+                }
+                if (icmpv4_fd >= 0){
+                    close(icmpv4_fd);
+                }
+                free(hosts);
+                fprintf(stderr, "Error: failed to open scan socket\n");
+                return 1;
+            }
+
+            for (int kndex = 0; kndex < generated; kndex++) {
                 if (stop_requested) {
                     fprintf(stderr, "Interrupted by user\n");
                     break;
                 }
 
-                memset(&result, 0, sizeof(result));
+                send_arp_request(arp_fd, hosts[kndex], &interface_info, interface_index);
+                send_icmpv4_request(icmpv4_fd, hosts[kndex]);
+            }
+            
+            receive_arp_replies(arp_fd, results, generated, &interface_info, interface_info.ip, args.timeout_in_ms);
+            receive_icmpv4_replies(icmpv4_fd, results, generated, args.timeout_in_ms);
 
-                scan_arp_ipv4(
-                    hosts[jndex],
-                    args.interface,
-                    args.timeout_in_ms,
-                    &result
-                );
+            close(arp_fd);
+            close(icmpv4_fd);
 
-                scan_icmpv4(
-                    hosts[jndex],
-                    args.timeout_in_ms,
-                    &result
-                );
-
-                if (result.arpndp_ok) {
+            for (int lndex = 0; lndex < generated; lndex++){
+                if (results[lndex].arpndp_ok) {
                     printf("%s arp OK (%s), icmpv4 %s\n",
-                    result.ip,
-                    result.mac,
-                    result.icmp_ok ? "OK" : "FAIL");
+                    results[lndex].ip,
+                    results[lndex].mac,
+                    results[lndex].icmp_ok ? "OK" : "FAIL");
                 } else {
                     printf("%s arp FAIL, icmpv4 %s\n",
-                    result.ip,
-                    result.icmp_ok ? "OK" : "FAIL");
+                    results[lndex].ip,
+                    results[lndex].icmp_ok ? "OK" : "FAIL");
                 }
+
             }
+            free(hosts);
         }
 
         else if (subnet.form_version == 6) {

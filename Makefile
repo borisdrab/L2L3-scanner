@@ -25,11 +25,11 @@ src/%.o: src/%.c
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 clean:
-	rm -f $(OBJ) $(TARGET) $(LOGIN).zip
+	rm -f $(OBJ) $(TARGET) $(LOGIN).zip tests_runner
 
 test: $(TARGET)
-	chmod +x tests/test.sh
-	bash tests/test.sh
+	$(CC) -o tests_runner tests/scanner_tests.c $(shell pkg-config --cflags --libs criterion)
+	./tests_runner --verbose
 
 NixDevShellName:
 	@echo c

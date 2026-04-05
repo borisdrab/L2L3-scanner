@@ -6,7 +6,9 @@
 #include <stdlib.h>
 
 
+// converting timeout argument from text to integer
 static int convert_param_to_timeout (const char *text, int *value) {
+
     char *end = NULL;
     long parsed_value = strtol(text, &end, 10);
 
@@ -14,7 +16,7 @@ static int convert_param_to_timeout (const char *text, int *value) {
         return 0;
     }
 
-    if(parsed_value <= 0 ||  parsed_value > 600000) {
+    if(parsed_value <= 0 ||  parsed_value > 600000) {       // only positive and in reasonable range
         return 0;
     }
 
@@ -24,11 +26,16 @@ static int convert_param_to_timeout (const char *text, int *value) {
 }
 
 int parse_args(int argc, char **argv, program_args_t *args) {
+    
+    // initialize structure with default values.
     args->show_help = 0;
+
     args->list_interfaces = 0;
     args->interface[0] = '\0';
     args->interface_set = 0;
+
     args->timeout_in_ms = DEFAULT_TIMEOUT;
+
     args->subnet_count = 0;
 
     if (argc == 1) {
@@ -38,11 +45,11 @@ int parse_args(int argc, char **argv, program_args_t *args) {
 
     for (int index = 1; index < argc; index++) {
 
-        if (strcmp(argv[index], "-h") == 0 || strcmp(argv[index], "--help") == 0) {
+        if (strcmp(argv[index], "-h") == 0 || strcmp(argv[index], "--help") == 0) {     // help flag
             args->show_help = 1;
         }
 
-        else if (strcmp(argv[index], "-i") == 0) {
+        else if (strcmp(argv[index], "-i") == 0) {                      // interface handling
             if (index + 1 >= argc) {
                 args->list_interfaces = 1;
             }
@@ -58,7 +65,7 @@ int parse_args(int argc, char **argv, program_args_t *args) {
             }
         }
 
-        else if (strcmp(argv[index], "-w") == 0) {
+        else if (strcmp(argv[index], "-w") == 0) {                          // timeout parameter
             if (index + 1 >= argc) {
                 fprintf(stderr, "Error: missing timeout after -w argument\n");
                 return 1;
@@ -71,13 +78,13 @@ int parse_args(int argc, char **argv, program_args_t *args) {
             index++;
         }
 
-        else if (strcmp(argv[index], "-s") == 0) {
+        else if (strcmp(argv[index], "-s") == 0) {                    // subnet parameter: can be specified multiple times
             if (index + 1 >= argc) {
                 fprintf(stderr, "Error: missing subnet after -s\n");
                 return 1;
             }
 
-            if (args->subnet_count >= MAX_SUBNETS) {
+            if (args->subnet_count >= MAX_SUBNETS) {                   // prevent overflow
                 fprintf(stderr, "Error: too many subnets\n");
                 return 1;
             } 
@@ -86,7 +93,7 @@ int parse_args(int argc, char **argv, program_args_t *args) {
             index++;
         }
 
-        else {
+        else {                                                                 // unknown argument
             fprintf(stderr, "Error: unknown argument '%s'\n", argv[index]);
             return 1;
         }

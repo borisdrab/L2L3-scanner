@@ -12,16 +12,18 @@
 #include "interface.h"
 
 int get_interface_info(const char *ifname, interface_info_t *info) {
+
     struct ifaddrs *interfaces = NULL;
-    struct ifaddrs *current_interface = NULL;
+    struct ifaddrs  *current_interface = NULL;
     int socket_file_descriptor;
     struct ifreq interface_request;
 
+    // validate input pointers
     if (ifname == NULL || info == NULL) {
         return -1;
     }
 
-    memset(info, 0, sizeof(*info));
+    memset(info, 0, sizeof(*info));                            // initialize output structure and store
     strncpy(info->name, ifname, sizeof(info->name) - 1);
     info->name[sizeof(info->name) - 1] = '\0';
 
@@ -29,7 +31,9 @@ int get_interface_info(const char *ifname, interface_info_t *info) {
         return -1;
     }
 
+    // iterate over all interface addresses and keep only entries belonging to the interafce
     for (current_interface = interfaces; current_interface != NULL; current_interface = current_interface->ifa_next) {
+
         if (current_interface->ifa_addr == NULL) {
             continue;
         }
@@ -71,7 +75,7 @@ int get_interface_info(const char *ifname, interface_info_t *info) {
                     return -1;
                 }
 
-                break;
+                continue;
             }
 
             if (info->ipv6[0] == '\0') {
@@ -94,7 +98,7 @@ int get_interface_info(const char *ifname, interface_info_t *info) {
     strncpy(interface_request.ifr_name, ifname, IFNAMSIZ - 1);
     interface_request.ifr_name[IFNAMSIZ - 1] = '\0';
 
-    if (ioctl(socket_file_descriptor, SIOCGIFHWADDR, &interface_request) < 0) {
+    if (ioctl(socket_file_descriptor, SIOCGIFHWADDR, &interface_request) < 0) {     // mac address of the selected interface
         close(socket_file_descriptor);
         return -1;
     }

@@ -17,12 +17,14 @@
 #include "scan_arp.h"
 #include "interface.h"
 
+// arp frame
 typedef struct {
     unsigned char dst_mac_addr[6];
     unsigned char src_mac_addr[6];
     unsigned short ethertype;
 } __attribute__((packed)) ethernet_header_t;
 
+// arp header for ipv4
 typedef struct {
     unsigned short hardware_type;
     unsigned short protocol_type;
@@ -38,16 +40,18 @@ typedef struct {
 
 // new helper function for reimplementation
 static host_result_t *find_result_by_ip(host_result_t *results, int spread_count, const char *ip) {
+
     for (int index = 0; index < spread_count; index++) {
         if (strcmp(results[index].ip, ip) == 0) {
             return &results[index];
         }
     }
-    return NULL;
 
+    return NULL;
 }
 
 int open_arp_socket(const char *interface, int timeout, interface_info_t *interface_info, int *interface_index) {
+
     int raw_socket_fd;
     struct ifreq interface_request;
     struct timeval receive_timeout;
@@ -70,6 +74,7 @@ int open_arp_socket(const char *interface, int timeout, interface_info_t *interf
     strncpy(interface_request.ifr_name, interface, IFNAMSIZ - 1);
     interface_request.ifr_name[IFNAMSIZ - 1] = '\0';
 
+    // ranslate interface name to numeric interface index
     if (ioctl(raw_socket_fd, SIOCGIFINDEX, &interface_request) < 0) {
         close(raw_socket_fd);
         return -1;
@@ -77,6 +82,7 @@ int open_arp_socket(const char *interface, int timeout, interface_info_t *interf
 
     *interface_index = interface_request.ifr_ifindex;
 
+    // timeout computation
     receive_timeout.tv_sec = timeout / 1000;
     receive_timeout.tv_usec = (timeout % 1000) * 1000;
 
@@ -89,6 +95,7 @@ int open_arp_socket(const char *interface, int timeout, interface_info_t *interf
 }
 
 int send_arp_request(int raw_socket_fd, const char *target_ip, const interface_info_t *interface_info, int interface_index) {
+
     struct sockaddr_ll socket_address;
     struct in_addr sender_ip_addr;
     struct in_addr target_ip_addr;
@@ -109,6 +116,7 @@ int send_arp_request(int raw_socket_fd, const char *target_ip, const interface_i
         return -1;
     }
 
+    // prepare link-layer destination
     memset(&socket_address, 0, sizeof(socket_address));
     socket_address.sll_family = AF_PACKET;
     socket_address.sll_ifindex = interface_index;
@@ -121,6 +129,7 @@ int send_arp_request(int raw_socket_fd, const char *target_ip, const interface_i
     memcpy(ethernet_header->src_mac_addr, interface_info->mac_addr, 6);
     ethernet_header->ethertype = htons(ETH_P_ARP);
 
+    // fill arp request header
     arp_header->hardware_type = htons(ARPHRD_ETHER);
     arp_header->protocol_type = htons(ETH_P_IP);
     arp_header->mac_len = 6;
@@ -158,6 +167,11 @@ int receive_arp_replies(int raw_socket_fd, host_result_t *results, int result_co
     gettimeofday(&start_time, NULL);        // start timeout window
 
     for (;;) {
+
+        if (stop_requested) {
+            break;
+        }
+
         long elapsed_ms;
 
         gettimeofday(&current_time, NULL);
@@ -170,7 +184,7 @@ int receive_arp_replies(int raw_socket_fd, host_result_t *results, int result_co
         received_bytes = recvfrom(raw_socket_fd, receive_buffer, sizeof(receive_buffer), 0, NULL, NULL);
 
         if (received_bytes < 0) {
-            break;
+            continue;
         }
 
         if ((size_t)received_bytes < sizeof(ethernet_header_t) + sizeof(arp_header_t)) {
@@ -180,7 +194,7 @@ int receive_arp_replies(int raw_socket_fd, host_result_t *results, int result_co
         ethernet_header_t *recv_eth_hdr = (ethernet_header_t *)receive_buffer;
         arp_header_t *receive_arp_hdr = (arp_header_t *)(receive_buffer + sizeof(ethernet_header_t));
 
-        if (ntohs(recv_eth_hdr->ethertype) != ETH_P_ARP) {
+        if (ntohs(recv_eth_hdr->ethertype) != ETH_P_ARP) {          // accept only ARP reply frame
             continue;
         }
 
@@ -205,6 +219,7 @@ int receive_arp_replies(int raw_socket_fd, host_result_t *results, int result_co
             continue;
         }
 
+        // match reply with the corresponding result entry
         host_result_t *result = find_result_by_ip(results, result_count, reply_ip);
         if (result == NULL) {
             continue;

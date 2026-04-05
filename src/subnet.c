@@ -5,7 +5,9 @@
 #include <stdlib.h>
 #include <stdint.h>
 
+// detect whether input string is ipv4 or ipv6
 int detect_ip_version(const char *ip_str) {
+
     struct in_addr addr4;
     struct in6_addr addr6;
 
@@ -19,7 +21,9 @@ int detect_ip_version(const char *ip_str) {
     return 0;
 }
 
+// split subnet string "ip/prefix into components
 int split_subnet(const char *subnet_str, parsed_subnet_t *result) {
+
     char buffer[MAX_IP_STR_LEN];
     char *slash;
     char *prefix_str;
@@ -33,6 +37,7 @@ int split_subnet(const char *subnet_str, parsed_subnet_t *result) {
     strncpy(buffer, subnet_str, sizeof(buffer) -1);
     buffer[sizeof(buffer) - 1] = '\0';
 
+    // separator
     slash = strchr(buffer,'/');
     if (slash == NULL) {
         return 0;
@@ -77,11 +82,14 @@ int split_subnet(const char *subnet_str, parsed_subnet_t *result) {
     return 1;
 }
 
+// normalize subnet - compute network address
 int normalize_subnet(parsed_subnet_t *subnet) {
+
     if (subnet == NULL) {
         return 0;
     }
 
+    // ipv4 normalization
     if (subnet->form_version == 4) {
         struct in_addr addr;
         uint32_t ip_host_order;
@@ -111,6 +119,7 @@ int normalize_subnet(parsed_subnet_t *subnet) {
         return 1;
     }
 
+    // ipv6 normalization
     if (subnet->form_version == 6) {
         struct in6_addr addr6;
         int full_bytes;
@@ -147,6 +156,7 @@ int normalize_subnet(parsed_subnet_t *subnet) {
 }
 
 long long count_hosts(const parsed_subnet_t *subnet) {
+
     if (subnet == NULL) {
         return -1;
     }
@@ -154,9 +164,7 @@ long long count_hosts(const parsed_subnet_t *subnet) {
     if (subnet->form_version == 4) {
         int host_bits;
         long long block_size;
-        
-        host_bits = 32 - subnet->prefix;
-        block_size = 1LL << host_bits;
+        long long usable_hosts;
 
         if (subnet->prefix == 32) {
             return 1;
@@ -166,7 +174,19 @@ long long count_hosts(const parsed_subnet_t *subnet) {
             return 2;
         }
 
-        return block_size - 2; //network, broadcast
+        if (subnet->prefix == 0) {
+            return -1;
+        }
+        
+        host_bits = 32 - subnet->prefix;
+        block_size = 1LL << host_bits;
+        usable_hosts = block_size - 2;          // network, broadcast
+
+        if (usable_hosts > MAX_IPV4_HOSTS) {
+            return -1;
+        }
+
+        return usable_hosts;
     }
 
     if (subnet->form_version == 6) {
@@ -183,7 +203,7 @@ long long count_hosts(const parsed_subnet_t *subnet) {
             return 1;
         }
 
-        if (host_bits > 16) {
+        if (host_bits > 16) {       // limit size (avoid big allocations)
             return -1;
         }
 
@@ -199,13 +219,15 @@ long long count_hosts(const parsed_subnet_t *subnet) {
     return -1;
 }
 
+// generate all ipv4 host addresses in subnet
 int generate_ipv4_hosts(const parsed_subnet_t *subnet, char hosts[][MAX_IP_STR_LEN], int max_hosts) {
+
     struct in_addr addr;
     uint32_t ip_host_order;
     uint32_t mask;
     uint32_t network_host_order;
     uint32_t broadcast_host_order;
-    uint32_t block_size;
+    uint64_t block_size;
 
     int generated = 0;
 
@@ -214,6 +236,15 @@ int generate_ipv4_hosts(const parsed_subnet_t *subnet, char hosts[][MAX_IP_STR_L
     }
 
     if (subnet->form_version != 4) {
+        return -1;
+    }
+
+
+    if (subnet->prefix == 0) {
+        return -1;
+    }
+
+    if (max_hosts > MAX_IPV4_HOSTS) {
         return -1;
     }
 
@@ -227,22 +258,18 @@ int generate_ipv4_hosts(const parsed_subnet_t *subnet, char hosts[][MAX_IP_STR_L
         if (inet_ntop(AF_INET, &addr, hosts[0], MAX_IP_STR_LEN) == NULL) {
             return -1;
         }
-
         return 1;
     }
 
-
-    if (subnet->prefix == 0) {
-        mask = 0;
-    } else {
-        mask = 0xFFFFFFFFu << (32 - subnet->prefix);    
-    }
+    
+    mask = 0xFFFFFFFFu << (32 - subnet->prefix);    
 
     network_host_order = ip_host_order & mask;
 
-    block_size = 1u << (32 - subnet->prefix);
+    block_size = 1ULL << (32 - subnet->prefix);
     broadcast_host_order = network_host_order + block_size - 1;
 
+    // special case
     if (subnet->prefix == 31) {
         for (uint32_t ip = network_host_order; ip <= broadcast_host_order; ip++) {
             struct in_addr current_addr;
@@ -263,6 +290,7 @@ int generate_ipv4_hosts(const parsed_subnet_t *subnet, char hosts[][MAX_IP_STR_L
         return generated;
     }
 
+    // normal case
     for (uint32_t ip = network_host_order + 1; ip < broadcast_host_order; ip++) {
         struct in_addr current_addr;
 
@@ -282,6 +310,7 @@ int generate_ipv4_hosts(const parsed_subnet_t *subnet, char hosts[][MAX_IP_STR_L
 }
 
 int generate_ipv6_hosts(const parsed_subnet_t *subnet, char hosts[][MAX_IP_STR_LEN], int max_hosts) {
+
     struct in6_addr base_addr;
     int host_bits;
     long long total_hosts;
@@ -318,6 +347,7 @@ int generate_ipv6_hosts(const parsed_subnet_t *subnet, char hosts[][MAX_IP_STR_L
         total_hosts = max_hosts;
     }
 
+    // generate addresses by incrementing last 2 bytes
     for (int index = 0; index < total_hosts; index++) {
         struct in6_addr current_addr = base_addr;
 

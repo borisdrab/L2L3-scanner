@@ -2,6 +2,7 @@
 #define SUBNET_H
 
 #define MAX_IP_STR_LEN 128
+#define MAX_IPV4_HOSTS 65536
 #define MAX_IPV6_HOSTS 65536
 
 typedef struct {

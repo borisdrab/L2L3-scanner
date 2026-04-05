@@ -13,7 +13,9 @@
 #include "scan_icm4.h"
 
 
+// helper function for packet checksum 
 unsigned short icmp_checksum(void *data, int len) {
+
     unsigned short *buf = data;
     unsigned int summary = 0;
 
@@ -28,12 +30,13 @@ unsigned short icmp_checksum(void *data, int len) {
     summary = (summary >> 16) + (summary & 0xFFFF);
     summary += (summary >> 16);
 
-    return (unsigned short)(~summary); // bitwise not
+    return (unsigned short)(~summary);      // bitwise not
 
 }
 
 // new helper function for reimplementation
 static host_result_t *find_result_by_ip(host_result_t *results, int spread_count, const char *ip) {
+
     for (int index = 0; index < spread_count; index++) {
         if (strcmp(results[index].ip, ip) == 0) {
             return &results[index];
@@ -44,16 +47,20 @@ static host_result_t *find_result_by_ip(host_result_t *results, int spread_count
 }
 
 int open_icmpv4_socket(int timeout) {
+
     int raw_socket_fd;
     struct timeval receive_timeout;
 
+    // open raw socket for icmpv4
     raw_socket_fd = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
     if (raw_socket_fd < 0) {
         return -1;
     }
 
+    // timeout computation
     receive_timeout.tv_sec = timeout / 1000;
     receive_timeout.tv_usec = (timeout % 1000) * 1000;
+
 
     if (setsockopt(raw_socket_fd, SOL_SOCKET, SO_RCVTIMEO, &receive_timeout, sizeof(receive_timeout)) < 0) {
         close(raw_socket_fd);
@@ -64,6 +71,7 @@ int open_icmpv4_socket(int timeout) {
 }
 
 int send_icmpv4_request(int raw_socket_fd, const char *ip) {
+
     struct sockaddr_in target_addr;
     unsigned char send_buffer[64];
     struct icmphdr *icmp_header;
@@ -81,6 +89,7 @@ int send_icmpv4_request(int raw_socket_fd, const char *ip) {
 
     memset(send_buffer, 0, sizeof(send_buffer));
 
+    // construct icmpv4 echo request packet
     icmp_header = (struct icmphdr *)send_buffer;
     icmp_header->type = ICMP_ECHO;
     icmp_header->code = 0;
@@ -89,6 +98,7 @@ int send_icmpv4_request(int raw_socket_fd, const char *ip) {
     icmp_header->checksum = 0;
     icmp_header->checksum = icmp_checksum(send_buffer, sizeof(send_buffer));
 
+    // send icmpv4 echo request
     if (sendto(raw_socket_fd, send_buffer, sizeof(send_buffer), 0, (struct sockaddr *)&target_addr, sizeof(target_addr)) < 0) {
         return -1;
     }
@@ -97,6 +107,7 @@ int send_icmpv4_request(int raw_socket_fd, const char *ip) {
 }
 
 int receive_icmpv4_replies(int raw_socket_fd, host_result_t *results, int result_count, int timeout) {
+
     unsigned char receive_buffer[1024];
     ssize_t received_bytes;
     struct timeval start_time, current_time;
@@ -108,6 +119,11 @@ int receive_icmpv4_replies(int raw_socket_fd, host_result_t *results, int result
     gettimeofday(&start_time, NULL);    // start timeout window 
 
     for (;;) {
+
+        if (stop_requested) {
+            break;
+        }
+        
         long elapsed_ms;
 
         gettimeofday(&current_time, NULL);
@@ -120,10 +136,10 @@ int receive_icmpv4_replies(int raw_socket_fd, host_result_t *results, int result
         received_bytes = recvfrom(raw_socket_fd, receive_buffer, sizeof(receive_buffer), 0, NULL, NULL);
 
         if (received_bytes < 0) {
-            break;
+            continue;
         }
 
-        if ((size_t)received_bytes < sizeof(struct iphdr)) {
+        if ((size_t)received_bytes < sizeof(struct iphdr)) {        // if ip header is present
             continue;
         }
 
@@ -136,7 +152,7 @@ int receive_icmpv4_replies(int raw_socket_fd, host_result_t *results, int result
 
         struct icmphdr *icmp_reply = (struct icmphdr *)(receive_buffer + ip_header_len);
 
-        if (icmp_reply->type != ICMP_ECHOREPLY) {
+        if (icmp_reply->type != ICMP_ECHOREPLY) {             // accept only echo reply
             continue;
         }
 
@@ -157,6 +173,7 @@ int receive_icmpv4_replies(int raw_socket_fd, host_result_t *results, int result
             continue;
         }
 
+        // match reply with the corresponding result entry
         host_result_t *result = find_result_by_ip(results, result_count, reply_ip);
         if (result == NULL) {
             continue;

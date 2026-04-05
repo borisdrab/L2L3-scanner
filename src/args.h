@@ -1,10 +1,10 @@
 #ifndef ARGS_H
 #define ARGS_H
 
-#define MAX_SUBNETS 32
-#define DEFAULT_TIMEOUT 1000
+#define MAX_SUBNETS 32                  // maximum number of subnets
+#define DEFAULT_TIMEOUT 1000            // default timeout in milliseconds used when -w is not provided
 
-typedef struct {
+typedef struct {                        // parsed command-line config
     int show_help;
     int list_interfaces;
 

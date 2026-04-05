@@ -187,6 +187,7 @@ The testing strategy combines both validation-oriented and integration testing.
 Low-level packet structure (e.g. exact binary format of frames) is not tested separately, but correctness is verified through successful communication and expected outputs.
 
 ### What was tested 
+
 • IPv4 scanning (ARP + ICMPv4)
 
 • IPv6 scanning (NDP + ICMPv6)
@@ -203,11 +204,43 @@ Low-level packet structure (e.g. exact binary format of frames) is not tested se
 
 • Various edge cases
 
-## Why it was tested
+### Why it was tested
 These tests were chosen to verify both the common use cases and edge cases required by the assignment. Special attention was given to argument parsing, subnet validation, and correct behavior for both IPv4 and IPv6.
 
-## Testing environment
-The main testing environment was the provided virtual machine. Additional tests were performed in a custom virtual environment with configured virtual interfaces and hosts.
+### How it was tested
+
+Testing was performed using a combination of:
+
+• Automated tests written in C using the Criterion framework
+
+• Manual testing on real and virtual networks
+
+• Integration testing by executing the scanner with various parameters
+
+Tests were executed both with and without root privileges to verify correct behavior and expected limitations.
+
+### Testing environment
+The main testing environment was the provided reference virtual machine running Linux in the faculty Nix development environment. Additional tests were performed in a custom virtual environment with configured virtual interfaces and hosts.
+
+### Example Test Case
+Command:
+```bash
+sudo ./ipk-L2L3-scan -i enp0s1 -s 10.0.2.0/30
+```
+
+### Expected output 
+• Program prints scanning ranges
+
+• Outputs ARP and ICMP results for each host
+
+### Actual output
+```bash
+Scanning ranges:
+10.0.2.0/30 2
+
+10.0.2.1 arp FAIL, icmpv4 FAIL
+10.0.2.2 arp FAIL, icmpv4 FAIL
+```
 
 ## Expected and actual results
 For valid inputs, the scanner was expected to start correctly, print normalized scanned ranges, and output ARP/ NDP and ICMP results for individual hosts.
@@ -236,10 +269,13 @@ FIT VUT Brno
 
 
 ## References
-• Linux manual pages for networking-related interfaces and protocols: https://docs.kernel.org/networking/index.html
+• Linux networking documentation:
+  https://docs.kernel.org/networking/index.html
 
-• Veth-dev: https://man7.org/linux/man-pages/man4/veth.4.html
+• Veth virtual network interfaces:
+  https://man7.org/linux/man-pages/man4/veth.4.html
 
-• Criterion testing framework documentation: https://github.com/snaipe/criterion
+• Criterion testing framework:
+  https://github.com/Snaipe/Criterion
 
 • IPK Gitea Issues discussions

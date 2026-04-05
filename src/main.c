@@ -371,7 +371,7 @@ int main(int argc, char *argv[]){
     }
 
     if (stop_requested) {
-        fprintf(stderr, " Interrupted by user\n");
+        fprintf(stderr, "Interrupted by user\n");
     } 
 
     return 0;    

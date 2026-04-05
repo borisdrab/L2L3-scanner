@@ -27,6 +27,12 @@ This changelog reflects the development progression of the project from initial 
 - Stability problems discovered during later testing
 - Fixed MAC address formatting
 
+## Known Limitations
+- Maximum number of generated hosts is limited (65 536)
+- Requires root privileges (raw sockets)
+- No parallel scanning (single-threaded design)
+- Not optimized for very large networks (e.g. /16 and larger)
+
 ----
 
 ## / Feature Completion Phase /
